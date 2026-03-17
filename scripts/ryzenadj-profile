@@ -1,0 +1,149 @@
+#!/bin/bash
+# ryzenadj-profile - Hardware TDP management for Ryzen APU
+# This script must be run with sudo privileges for profile changes
+#
+# Profiles for Ryzen 5 6600H (Rembrandt APU):
+# - power-saver: Low power for battery life
+# - balanced: Default balanced settings
+# - performance: Maximum TDP for gaming (NO THERMAL LIMITS)
+#
+# Usage: sudo ryzenadj-profile <profile>
+# Example: sudo ryzenadj-profile performance
+
+set -euo pipefail
+
+PROFILE="${1:-}"
+RYZENADJ="/usr/bin/ryzenadj"
+
+# Check if ryzenadj exists
+if [[ ! -x "$RYZENADJ" ]]; then
+    echo "Error: ryzenadj not found at $RYZENADJ" >&2
+    exit 1
+fi
+
+# Helper function to check root privileges
+require_root() {
+    if [[ $EUID -ne 0 ]]; then
+        echo "Error: This command requires sudo" >&2
+        exit 1
+    fi
+}
+
+apply_power_saver() {
+    require_root
+    # Power Saver: Minimum power consumption for battery life
+    # STAPM: 15W, Fast: 18W, Slow: 15W
+    # Still allow 100°C to prevent unnecessary throttling
+    "$RYZENADJ" \
+        --stapm-limit=15000 \
+        --fast-limit=18000 \
+        --slow-limit=15000 \
+        --tctl-temp=100 \
+        --vrm-current=60000 \
+        --vrmmax-current=60000 \
+        2>/dev/null
+
+    echo "power-saver" > /tmp/.ryzenadj_current_profile
+    echo "Applied: Power Saver (15W STAPM, 100°C limit)"
+}
+
+apply_balanced() {
+    require_root
+    # Balanced: Default reasonable settings
+    # STAPM: 28W, Fast: 35W, Slow: 28W
+    # 100°C limit - no thermal throttling
+    "$RYZENADJ" \
+        --stapm-limit=28000 \
+        --fast-limit=35000 \
+        --slow-limit=28000 \
+        --tctl-temp=100 \
+        --vrm-current=90000 \
+        --vrmmax-current=90000 \
+        2>/dev/null
+
+    echo "balanced" > /tmp/.ryzenadj_current_profile
+    echo "Applied: Balanced (28W STAPM, 100°C limit)"
+}
+
+apply_performance() {
+    require_root
+    # Performance: MAXIMUM power for gaming - NO LIMITS
+    # STAPM: 45W, Fast: 54W, Slow: 45W
+    # 100°C limit - let hardware run at full potential
+    # Maximum VRM headroom for sustained performance
+    "$RYZENADJ" \
+        --stapm-limit=45000 \
+        --fast-limit=54000 \
+        --slow-limit=45000 \
+        --tctl-temp=100 \
+        --vrm-current=120000 \
+        --vrmmax-current=120000 \
+        2>/dev/null
+
+    echo "performance" > /tmp/.ryzenadj_current_profile
+    echo "Applied: Performance (45W STAPM, 100°C limit - FULL POWER)"
+}
+
+get_current() {
+    # No root required - just reads a file
+    if [[ -f /tmp/.ryzenadj_current_profile ]]; then
+        cat /tmp/.ryzenadj_current_profile
+    else
+        echo "unknown"
+    fi
+}
+
+show_status() {
+    require_root
+    echo "=== Current ryzenadj Profile ==="
+    echo "Profile: $(get_current)"
+    echo ""
+    echo "=== Hardware Status ==="
+    "$RYZENADJ" -i 2>/dev/null | grep -E "(STAPM|PPT|THM|Temperature)" || true
+}
+
+show_usage() {
+    # No root required - just prints help
+    echo "Usage: $0 <profile>"
+    echo ""
+    echo "Profiles:"
+    echo "  power-saver   - 15W TDP, battery optimization"
+    echo "  balanced      - 28W TDP, default settings"
+    echo "  performance   - 45W TDP, FULL POWER (no thermal limits)"
+    echo "  status        - Show current profile and hardware status (requires sudo)"
+    echo "  current       - Print current profile name only (no sudo needed)"
+    echo ""
+    echo "All profiles use 100°C thermal limit (hardware max)"
+    echo ""
+    echo "Examples:"
+    echo "  sudo $0 performance   # Enable gaming mode - FULL POWER"
+    echo "  sudo $0 balanced      # Return to normal"
+    echo "  $0 current            # Check current profile (no sudo needed)"
+}
+
+case "$PROFILE" in
+    power-saver|powersaver|saver)
+        apply_power_saver
+        ;;
+    balanced|balance|default)
+        apply_balanced
+        ;;
+    performance|perf|gaming|game)
+        apply_performance
+        ;;
+    status)
+        show_status
+        ;;
+    current)
+        get_current
+        ;;
+    -h|--help|help|"")
+        show_usage
+        ;;
+    *)
+        echo "Error: Unknown profile '$PROFILE'" >&2
+        echo ""
+        show_usage
+        exit 1
+        ;;
+esac

@@ -1,0 +1,15 @@
+# Sudoers file for ryzenadj-profile script
+# This allows the user to run ryzenadj-profile without password prompt
+#
+# Installation:
+#   sudo cp ~/.config/hypr/scripts/99-ryzenadj-profile.sudoers /etc/sudoers.d/99-ryzenadj-profile
+#   sudo chmod 440 /etc/sudoers.d/99-ryzenadj-profile
+#   sudo visudo -c  # Verify syntax
+#
+# Security note: This only allows the specific script, not arbitrary ryzenadj commands
+
+# Allow user miku to run ryzenadj-profile without password
+miku ALL=(root) NOPASSWD: /home/miku/.config/hypr/scripts/ryzenadj-profile
+
+# Also allow direct ryzenadj for manual tuning (optional, comment out if not needed)
+miku ALL=(root) NOPASSWD: /usr/bin/ryzenadj
